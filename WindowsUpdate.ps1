@@ -27,18 +27,18 @@ Invoke-WithRetry {
     }
 }
 
-# Ensure the directory exists for the transcript
-$transcriptPath = "C:\temp\windowsupdate$(Get-Date -Format 'yyyyMMddHHmmss').log"
-Invoke-WithRetry {
-    if (!(Test-Path -Path "C:\temp")) {
-        New-Item -ItemType Directory -Force -Path "C:\temp"
-    }
-}
+# # Ensure the directory exists for the transcript
+# $transcriptPath = "C:\temp\windowsupdate$(Get-Date -Format 'yyyyMMddHHmmss').log"
+# Invoke-WithRetry {
+#     if (!(Test-Path -Path "C:\temp")) {
+#         New-Item -ItemType Directory -Force -Path "C:\temp"
+#     }
+# }
 
-# Start transcript to log the output of the script only if not already started
-Invoke-WithRetry {
-    Start-Transcript -Path $transcriptPath
-}
+# # Start transcript to log the output of the script only if not already started
+# Invoke-WithRetry {
+#     Start-Transcript -Path $transcriptPath
+# }
 
 # Register the PSRepository only if it's not already registered
 $repositoryName = "PSGallery"
@@ -80,7 +80,7 @@ Invoke-WithRetry {
     }
 }
 
-# Stop transcript only if it was started by this script
-Invoke-WithRetry {
-    Stop-Transcript
-}
+# # Stop transcript only if it was started by this script
+# Invoke-WithRetry {
+#     Stop-Transcript
+# }
