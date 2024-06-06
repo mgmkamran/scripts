@@ -1,39 +1,86 @@
 #Author: mgmkamran
 
-#Add TLS1.2
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-# Ensure the directory exists for the transcript
-$transcriptPath = "C:\temp\windowsupdate.log"
-if (!(Test-Path -Path "C:\temp")) {
-    New-Item -ItemType Directory -Force -Path "C:\temp"
+# Function to perform a command with retry logic
+function Invoke-WithRetry {
+    param (
+        [ScriptBlock]$Command,
+        [int]$RetryCount = 3
+    )
+    $currentCount = 0
+    while ($currentCount -lt $RetryCount) {
+        try {
+            & $Command
+            return
+        } catch {
+            Write-Host "Attempt $currentCount failed: $_"
+            Start-Sleep -Seconds 20
+            $currentCount++
+        }
+    }
+    Write-Host "Command failed after $RetryCount attempts."
 }
 
-# Start transcript to log the output of the script
-Start-Transcript -Path $transcriptPath
+# Add TLS1.2 if not already set
+Invoke-WithRetry {
+    if ([Net.ServicePointManager]::SecurityProtocol -notcontains [Net.SecurityProtocolType]::Tls12) {
+        [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12
+    }
+}
 
-# Asynchronously install the necessary modules and packages
-$installNuGet = Start-Job -ScriptBlock {
-    # Check if the NuGet package provider is installed, if not, install it
+# Ensure the directory exists for the transcript
+$transcriptPath = "C:\temp\windowsupdate$(Get-Date -Format 'yyyyMMddHHmmss').log"
+Invoke-WithRetry {
+    if (!(Test-Path -Path "C:\temp")) {
+        New-Item -ItemType Directory -Force -Path "C:\temp"
+    }
+}
+
+# Start transcript to log the output of the script only if not already started
+Invoke-WithRetry {
+    Start-Transcript -Path $transcriptPath
+}
+
+# Register the PSRepository only if it's not already registered
+$repositoryName = "PSGallery"
+$repositorySourceLocation = "https://www.powershellgallery.com/api/v2"
+Invoke-WithRetry {
+    if (!(Get-PSRepository -Name $repositoryName -ErrorAction SilentlyContinue)) {
+        Register-PSRepository -Name $repositoryName -SourceLocation $repositorySourceLocation -InstallationPolicy Untrusted
+    }
+}
+
+# Asynchronously install the necessary modules and packages only if they are not already installed
+Invoke-WithRetry {
+    # Install NuGet package provider if not already installed
     if (!(Get-PackageProvider -Name 'Nuget' -ListAvailable)) {
         Install-PackageProvider -Name "NuGet" -Force -SkipPublisherCheck
     }
-    # Check if the PSWindowsUpdate module is installed, if not, install it
+    # Install PSWindowsUpdate module if not already installed
     if (!(Get-Module -Name PSWindowsUpdate -ListAvailable)) {
         Install-Module PSWindowsUpdate -Force -SkipPublisherCheck
     }
 }
 
-# Wait for the job to complete
-Wait-Job $installNuGet
-Write-Host "Modules and packages installed"
 
-# Import the PSWindowsUpdate module
-Import-Module PSWindowsUpdate -Force
-Write-Host "PSWindowsUpdate module imported"
+# Import the PSWindowsUpdate module only if it's not already imported
+Invoke-WithRetry {
+    if (!(Get-Module -Name PSWindowsUpdate)) {
+        Import-Module PSWindowsUpdate -Force
+        Write-Host "PSWindowsUpdate module imported"
+    }
+}
 
-# Get and install available updates
-Get-WindowsUpdate -IgnoreReboot
-Install-WindowsUpdate -AcceptAll -IgnoreReboot
+# Get and install available updates only if they are not already installed
+Invoke-WithRetry {
+    $updates = Get-WindowsUpdate -IgnoreReboot
+    if ($updates) {
+        Install-WindowsUpdate -AcceptAll -IgnoreReboot
+    } else {
+        Write-Host "No new updates to install."
+    }
+}
 
-# Stop transcript
-Stop-Transcript
+# Stop transcript only if it was started by this script
+Invoke-WithRetry {
+    Stop-Transcript
+}
